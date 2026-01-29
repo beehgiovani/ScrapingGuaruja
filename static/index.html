@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automação Omega - Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+    <div class="app-container">
+
+        <!-- HEADER -->
+        <header>
+            <div>
+                <h1>Automação Geometrus</h1>
+                <p class="subtitle">Painel de Controle e Monitoramento Centralizado</p>
+            </div>
+
+            <div style="display:flex; gap:15px; align-items:center;">
+                <!-- Global Status Indicator -->
+                <div class="status-badge" id="statusBadge">
+                    <span class="indicator"></span>
+                    <span id="statusText">Desconectado</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- NAVIGATION TABS -->
+        <nav class="tab-nav">
+            <button class="tab-btn active" onclick="switchTab('dashboard')">
+                <span>📊</span> Dashboard
+            </button>
+            <button class="tab-btn" onclick="switchTab('logs')">
+                <span>📜</span> Logs em Tempo Real
+            </button>
+            <button class="tab-btn" onclick="switchTab('data')">
+                <span>💾</span> Explorador de Dados
+            </button>
+            <button class="tab-btn" onclick="switchTab('settings')">
+                <span>⚙️</span> Configurações
+            </button>
+        </nav>
+
+        <!-- ================= DASHBOARD TAB ================= -->
+        <main id="view-dashboard" class="tab-content active">
+
+            <!-- Quick Stats -->
+            <div class="stats-grid">
+                <div class="card stat-card">
+                    <h3>Total Lotes</h3>
+                    <div class="value" id="valTotal">-</div>
+                    <div style="font-size: 0.8em; color: #ff9800; margin-top: 5px;" id="valMissingContainer">
+                        Faltam: <span id="valMissing">-</span>
+                    </div>
+                </div>
+                <div class="card stat-card">
+                    <h3>Processados</h3>
+                    <div class="value" id="valProcessed">-</div>
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div class="card stat-card success">
+                    <h3>Sucesso</h3>
+                    <div class="value" id="valSuccess">-</div>
+                </div>
+                <div class="card stat-card error">
+                    <h3>Erros / Pendentes</h3>
+                    <div class="value" id="valErrors">-</div>
+                </div>
+            </div>
+
+            <div class="grid-2-col">
+                <!-- Advanced Monitoring -->
+                <div class="card" style="display:flex; flex-direction:column; gap:15px;">
+                    <h2>⚡ Monitoramento do Sistema</h2>
+
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div style="background:#2a2a2a; padding:15px; border-radius:8px;">
+                            <small style="color:#aaa">Velocidade</small>
+                            <div style="font-size:1.4em; font-weight:bold; color:#4caf50;"><span
+                                    id="statsSpeed">-</span> <small style="font-size:0.6em;">items/min</small></div>
+                        </div>
+                        <div style="background:#2a2a2a; padding:15px; border-radius:8px;">
+                            <small style="color:#aaa">Tempo Restante (Est.)</small>
+                            <div style="font-size:1.4em; font-weight:bold; color:#9c27b0;" id="statsETA">-</div>
+                        </div>
+                        <div style="background:#2a2a2a; padding:15px; border-radius:8px;">
+                            <small style="color:#aaa">Workers Ativos</small>
+                            <div style="font-size:1.4em; font-weight:bold; color:#00bcd4;" id="statsActiveWorkers">-
+                            </div>
+                        </div>
+                        <div style="background:#2a2a2a; padding:15px; border-radius:8px;">
+                            <small style="color:#aaa">Taxa de Erro</small>
+                            <div style="font-size:1.4em; font-weight:bold; color:#ff9800;" id="statsErrorRate">-</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MAIN CONTROLS -->
+                <div class="card controls-card">
+                    <h2>🎮 Controle de Execução</h2>
+
+                    <div class="mode-select-container" style="margin-bottom: 20px;">
+                        <label style="display: block; margin-bottom: 10px; font-weight: 500;">Modo de Operação:</label>
+                        <input type="hidden" id="execMode" value="SMART_RESUME">
+
+                        <div style="display: flex; gap: 10px; margin-bottom:15px;">
+                            <button class="btn" onclick="setExecutionMode('SMART_RESUME')"
+                                style="flex: 1; background: #2196F3; color: white;">
+                                ⏯️ Continuar (Smart)
+                            </button>
+                            <button class="btn" onclick="setExecutionMode('DEEP_SCAN')"
+                                style="flex: 1; background: #9C27B0; color: white;">
+                                🕵️ Varredura Profunda
+                            </button>
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn" onclick="setExecutionMode('FAST_RESUME')"
+                                style="flex: 1; background: #FF9800; color: white;">
+                                ⚡ Rápido
+                            </button>
+                            <button class="btn" onclick="setExecutionMode('REPROCESS_ALL')"
+                                style="flex: 1; background: #f44336; color: white;">
+                                🔄 Refazer Tudo
+                            </button>
+                        </div>
+                        <div id="currentModeDisplay"
+                            style="margin-top: 15px; font-size: 0.9em; color: #4caf50; font-weight: bold; text-align: center; border-top:1px solid #333; padding-top:10px;">
+                            Modo Selecionado: SMART RESUME
+                        </div>
+                    </div>
+
+                    <div id="reprocessOptionsArea"
+                        style="display:block; background:#222; padding:10px; border-radius:6px; margin-bottom:15px;">
+                        <label style="color:#aaa; font-size:0.8em; display:block; margin-bottom:5px;">Flags de
+                            Reprocessamento:</label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap:5px; font-size:0.8em;">
+                            <label><input type="checkbox" id="reprocessErrors"> Erros</label>
+                            <label><input type="checkbox" id="reprocessSemBoleto"> Sem Boleto</label>
+                            <label><input type="checkbox" id="reprocessDesmembrados"> Desmembrados</label>
+                            <label><input type="checkbox" id="reprocessUpdateMode"> Update Mode</label>
+                            <label><input type="checkbox" id="reprocessMoreSubunits"> Verif. Mais Subunidades</label>
+                        </div>
+                    </div>
+
+                    <div class="actions" style="border-top: 1px solid #444; padding-top: 20px; margin-top:0;">
+                        <button id="btnStart" class="btn btn-primary" onclick="startProcess()" style="flex:2;">
+                            ▶ Iniciar
+                        </button>
+                        <button id="btnStop" class="btn btn-danger" onclick="stopProcess()" disabled style="flex:1;">
+                            ⏹ Parar
+                        </button>
+                        <button id="btnReset" class="btn btn-warning" onclick="resetData()" style="flex:1;">
+                            🗑 Limpar
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Worker Grid -->
+            <h3 style="margin-bottom:15px; color:#aaa;">Status Individual dos Bots</h3>
+            <div class="worker-grid" id="workerGrid">
+                <!-- Injected via JS -->
+            </div>
+        </main>
+
+
+        <!-- ================= LOGS TAB ================= -->
+        <main id="view-logs" class="tab-content">
+            <div style="margin-bottom:15px; display:flex; justify-content:space-between; align-items:center;">
+                <h2>Logs de Execução</h2>
+                <div style="display:flex; gap:10px;">
+                    <button class="btn btn-secondary" onclick="fetchLogs()"
+                        style="padding: 0.5rem 1rem; font-size:0.9em;">🔄 Atualizar Agora</button>
+                    <label style="display:flex; align-items:center; gap:5px; font-size:0.9em; cursor:pointer;">
+                        <input type="checkbox" id="autoRefreshLogs" checked> Auto-refresh (1s)
+                    </label>
+                </div>
+            </div>
+
+            <div class="logs-layout">
+                <!-- Sidebar -->
+                <div class="logs-sidebar" id="logSidebar">
+                    <div class="log-source-item active" onclick="selectLogSource('all')" id="ls-all">Todos (Agregado)
+                    </div>
+                    <div class="log-source-item" onclick="selectLogSource('main')" id="ls-main">Main Process</div>
+                    <!-- Workers added via JS -->
+                </div>
+
+                <!-- Viewer -->
+                <div class="logs-viewer" id="logsArea">
+                    Carregando logs...
+                </div>
+            </div>
+        </main>
+
+
+        <!-- ================= DATA TAB ================= -->
+        <main id="view-data" class="tab-content">
+            <div class="card" style="margin-bottom: 2rem;">
+                <div class="table-header">
+                    <h2>🔎 Explorador de Dados</h2>
+
+                    <div class="filters">
+                        <!-- Search -->
+                        <div style="position:relative;">
+                            <input type="text" id="searchInput" placeholder="Buscar (Nome, Inscrição, CPF)..."
+                                onkeyup="filterTable()" style="padding-left: 35px;">
+                            <span
+                                style="position:absolute; left:10px; top:50%; transform:translateY(-50%); opacity:0.5;">🔍</span>
+                        </div>
+
+                        <!-- Quick Filters -->
+                        <div class="filter-group">
+                            <button class="filter-btn active" onclick="setFilter('all')">Todos</button>
+                            <button class="filter-btn" onclick="setFilter('sucesso')">✅ Sucesso</button>
+                            <button class="filter-btn" onclick="setFilter('particionados')">🏢 Apts/Subs</button>
+                            <button class="filter-btn" onclick="setFilter('erro')">❌ Erros / S. Boleto</button>
+                        </div>
+                    </div>
+
+                    <!-- PDF Export -->
+                    <div
+                        style="display:flex; gap:10px; align-items:center; border-left:1px solid #444; padding-left:15px;">
+                        <select id="pdfGroupBy" class="form-select" style="width:150px; padding:0.5rem;">
+                            <option value="">Ordem: Padrão</option>
+                            <option value="bairro">Agrupar: Bairro</option>
+                            <option value="rua">Agrupar: Rua</option>
+                        </select>
+                        <button class="btn btn-secondary" onclick="exportPDF()">📄 Gerar Relatório PDF</button>
+                    </div>
+                </div>
+
+                <!-- Advanced Filters Collapse -->
+                <details
+                    style="margin-bottom:15px; border:1px solid #333; border-radius:6px; padding:10px; background:#222;">
+                    <summary style="cursor:pointer; font-weight:500; color:#aaa;">Filtros Avançados (Bairro/Rua/Colunas)
+                    </summary>
+                    <div style="padding-top:10px; display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
+                        <div>
+                            <label style="display:block; font-size:0.8em; margin-bottom:5px;">Filtrar Texto
+                                Bairro:</label>
+                            <input type="text" id="pdfBairro" placeholder="Ex: Centro" class="form-input"
+                                onkeyup="updateExportParams()">
+                        </div>
+                        <div>
+                            <label style="display:block; font-size:0.8em; margin-bottom:5px;">Filtrar Texto Rua:</label>
+                            <input type="text" id="pdfRua" placeholder="Ex: Av Brasil" class="form-input"
+                                onkeyup="updateExportParams()">
+                        </div>
+                        <div style="grid-column: span 2; border-top:1px dashed #444; padding-top:10px;">
+                            <label style="display:block; font-size:0.8em; margin-bottom:5px;">Colunas no PDF:</label>
+                            <div style="display:flex; gap:15px; flex-wrap:wrap; font-size:0.85em;">
+                                <label><input type="checkbox" name="pdfCol" value="inscricao" checked> Inscrição</label>
+                                <label><input type="checkbox" name="pdfCol" value="lote" checked> Lote</label>
+                                <label><input type="checkbox" name="pdfCol" value="endereco" checked> Endereço</label>
+                                <label><input type="checkbox" name="pdfCol" value="proprietario" checked>
+                                    Proprietário</label>
+                                <label><input type="checkbox" name="pdfCol" value="documento" checked> Documento</label>
+                                <label><input type="checkbox" name="pdfCol" value="valor_venal"> Valor</label>
+                                <label><input type="checkbox" name="pdfCol" value="metragem"> Área</label>
+                                <label style="margin-left:auto; color:#f87171;"><input type="checkbox"
+                                        id="pdfIncludeErrors"> Incluir Erros no PDF</label>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <div class="table-wrapper">
+                    <table id="resultsTable">
+                        <thead>
+                            <tr>
+                                <th>Inscrição</th>
+                                <th>Lote / Unidade</th>
+                                <th>Proprietário</th>
+                                <th>CPF/CNPJ</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- JS Injection -->
+                        </tbody>
+                    </table>
+                </div>
+                <div style="text-align:center; padding:10px; color:#666; font-size:0.8em;">Mostrando 100 últimos grupos
+                    de resultados. Use a busca para encontrar específicos.</div>
+            </div>
+        </main>
+
+
+        <!-- ================= SETTINGS TAB ================= -->
+        <main id="view-settings" class="tab-content">
+
+            <div class="settings-grid">
+
+                <!-- General Settings -->
+                <div class="settings-section">
+                    <h2>🌐 Conexão & Workers</h2>
+
+                    <div class="form-group">
+                        <label class="form-label">Modo de Conexão</label>
+                        <select id="connMode" class="form-select">
+                            <option value="PROXY">Proxy (Webshare / BrightData)</option>
+                            <option value="TOR">Rede Tor (Anônimo)</option>
+                            <option value="FREE_PROXY">Free Proxy (Instável)</option>
+                            <option value="DIRECT">Direto (Sem Proxy)</option>
+                        </select>
+                        <button id="btnScrapeProxies" class="btn btn-secondary"
+                            style="width:100%; margin-top:10px; font-size:0.85em;">
+                            🔍 Buscar Proxies Grátis (Scraper)
+                        </button>
+                        <div id="proxyDisplayArea"
+                            style="display:none; margin-top:10px; font-size:0.8em; color:#aaa; font-family:monospace;">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Número de Robôs (Simultâneos)</label>
+                        <input type="number" id="numWorkersInput" class="form-input" min="1" max="50" value="20">
+                        <small style="color:#666;">Recomendado: 10-30</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Modo Invisível (Headless)</label>
+                        <label class="checkbox-card">
+                            <input type="checkbox" id="cfg_headless" checked>
+                            <div>
+                                <span style="display:block; font-weight:600;">Ativar Headless</span>
+                                <span style="font-size:0.8em; color:#aaa;">Ocultar janelas do navegador (Mais
+                                    Rápido)</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Scope Settings -->
+                <div class="settings-section">
+                    <div
+                        style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; border-bottom:1px solid #333; padding-bottom:1rem;">
+                        <h2 style="margin:0; border:none; padding:0;">🗺️ Zonas Alvo</h2>
+                        <label style="font-size:0.9em; cursor:pointer;"><input type="checkbox" id="selectAllZones">
+                            Selecionar Todas</label>
+                    </div>
+
+                    <div id="zoneCheckboxes"
+                        style="display:grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap:10px;">
+                        <!-- Generated by JS -->
+                    </div>
+                    <div style="margin-top:15px; font-size:0.85em; color:#888;">
+                        Selecione quais zonas geográficas da cidade o robô deve processar.
+                    </div>
+                </div>
+
+                <!-- Advanced Settings -->
+                <div class="settings-section" style="grid-column: 1 / -1;">
+                    <h2>⚙️ Avançado (Comportamento)</h2>
+                    <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                        <button class="btn btn-secondary" onclick="applyPreset('default')">Restaurar Padrão</button>
+                        <button class="btn btn-secondary" onclick="applyPreset('fast')">⚡ Preset Rápido</button>
+                        <button class="btn btn-secondary" onclick="applyPreset('robust')">🛡️ Preset Robusto</button>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:20px;">
+                        <!-- Timeouts & Retries -->
+                        <div class="form-group">
+                            <label class="form-label">Timeout (ms)</label>
+                            <input type="number" id="cfg_timeout" class="form-input" value="90000">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Max Retries (Erro)</label>
+                            <input type="number" id="cfg_retries" class="form-input" value="20">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Tentativas Captcha</label>
+                            <input type="number" id="cfg_captcha" class="form-input" value="15">
+                        </div>
+
+                        <!-- Logic -->
+                        <div class="form-group">
+                            <label class="form-label">Max Scan Misses</label>
+                            <input type="number" id="cfg_misses" class="form-input" value="3">
+                            <small style="font-size:0.7em; color:#666;">Parar após X não encontrados (Apt)</small>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Probe Step (Pulo)</label>
+                            <input type="number" id="cfg_probe" class="form-input" value="3">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Retentativas Sub-Lote</label>
+                            <input type="number" id="cfg_max_sub_retries" class="form-input" value="5">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sticky-actions">
+                <span style="align-self:center; color:#eda; margin-right:auto;">⚠️ Alterações aqui requerem reinício do
+                    bot.</span>
+                <button class="btn btn-primary" onclick="saveAdvancedConfig()">💾 Salvar Configurações</button>
+            </div>
+
+        </main>
+
+    </div>
+
+    <!-- Script -->
+    <script src="script.js?v=20250117_fixTableGroup3"></script>
+</body>
+
+</html>

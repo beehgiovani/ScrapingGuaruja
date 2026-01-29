@@ -1,0 +1,27 @@
+# General
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Logs and Temporary files
+*.log
+*.log.*
+*.tmp
+*.tmp*
+*.bak
+
+# Data and Models
+*.json
+*.pdf
+_saida_imoveis.json
+saida_imoveis*.json
+entrada_lotes.json
+analysis_result.txt
+
+# Directories to ignore
+backup_parts/
+backup_parts_rescue/
+backup_run_previous/
+tor_data/
