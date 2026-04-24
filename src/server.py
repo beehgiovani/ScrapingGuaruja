@@ -27,9 +27,9 @@ app.add_middleware(
 
 # Global process variable
 current_process: Optional[subprocess.Popen] = None
-LOG_FILE = "execution.log"
-INPUT_FILE = "entrada_lotes.json"
-OUTPUT_FILE = "saida_imoveis.json"
+LOG_FILE = "logs/execution.log"
+INPUT_FILE = "data/entrada_lotes.json"
+OUTPUT_FILE = "data/saida_imoveis.json"
 
 # Global Configuration
 SERVER_CONFIG = {
@@ -136,7 +136,7 @@ def get_status():
     worker_map = {} # id (int) -> string name
     
     # scan logs (Main source for active workers)
-    log_files = glob.glob("worker_*.log")
+    log_files = glob.glob("logs/worker_*.log")
     for lf in log_files:
         try:
             # worker_0.log
@@ -145,7 +145,7 @@ def get_status():
         except: pass
         
     # scan existing outputs (source for finished/legacy stats)
-    json_files = glob.glob("saida_imoveis*.json")
+    json_files = glob.glob("data/saida_imoveis*.json")
     json_files.sort()
     
     processed_base_ids = set()
@@ -250,7 +250,7 @@ def get_data():
     unique_map = {}
     
     # 1. Load Legacy (Oldest Source)
-    legacy_file = "saida_imoveis.json"
+    legacy_file = "data/saida_imoveis.json"
     if os.path.exists(legacy_file):
         try:
             with open(legacy_file, 'r', encoding='utf-8') as f:
@@ -262,7 +262,7 @@ def get_data():
         except: pass
 
     # 2. Load Shards (Newest Source) - Overwrites Legacy
-    output_files = sorted(glob.glob("saida_imoveis_part*.json"))
+    output_files = sorted(glob.glob("data/saida_imoveis_part*.json"))
     for out_f in output_files:
         try:
             with open(out_f, 'r', encoding='utf-8') as f:
@@ -278,7 +278,7 @@ def get_data():
 def remove_errors_from_files():
     """Removes non-success items from all output files to clear 'Errors' from UI"""
     import glob
-    files = glob.glob("saida_imoveis*.json")
+    files = glob.glob("data/saida_imoveis*.json")
     removed_total = 0
     
     for fpath in files:
@@ -507,11 +507,12 @@ def get_logs(source: str = "all"):
         logs_content += read_safe(LOG_FILE, "SERVER / MAIN LOG")
 
     import glob
-    worker_files = sorted(glob.glob("worker_*.log"))
+    worker_files = sorted(glob.glob("logs/worker_*.log"))
     
     for w_file in worker_files:
-        name_key = w_file.replace(".log", "").lower() # worker_0
-        display_name = name_key.upper() # WORKER_0
+        # Remove logs/ prefix
+        name_key = os.path.basename(w_file).replace(".log", "").lower()  # worker_0
+        display_name = name_key.upper()  # WORKER_0
         
         # If source is "all", include it
         if source == "all":
@@ -549,7 +550,7 @@ def export_pdf(bairro: str = None, rua: str = None, group_by: str = None, column
 
     # 2. Load Data
     all_data = []
-    output_files = glob.glob("saida_imoveis*.json")
+    output_files = glob.glob("data/saida_imoveis*.json")
     for out_f in output_files:
         try:
             with open(out_f, 'r', encoding='utf-8') as f:

@@ -1,0 +1,4 @@
+SocksPort 9050 IsolateSOCKSAuth IsolateClientAddr
+ControlPort 9051
+DataDirectory tor_data
+CookieAuthentication 1

@@ -7,6 +7,7 @@ import sys
 # Force UTF-8 for Windows Console/Logs
 sys.stdout.reconfigure(encoding='utf-8')
 
+sys.path.append(os.path.join(os.getcwd(), 'src'))
 from tor_manager import TorManager
 
 def run_parallel(num_workers=3):
@@ -54,10 +55,10 @@ def run_parallel(num_workers=3):
     log_files = []
 
     for i in range(num_workers):
-        cmd = [sys.executable, "-u", "automacao_imoveis.py", "--shard", str(i), "--total", str(num_workers)]
+        cmd = [sys.executable, "-u", "src/automacao_imoveis.py", "--shard", str(i), "--total", str(num_workers)]
         
         # Open separate log file for each worker with line buffering (Text Mode)
-        log_file = open(f"worker_{i}.log", "w", encoding="utf-8", buffering=1)
+        log_file = open(f"logs/worker_{i}.log", "w", encoding="utf-8", buffering=1)
         log_files.append(log_file)
         
         # Prepare env with USE_TOR inherited from parent (Server)

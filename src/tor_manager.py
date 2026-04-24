@@ -16,9 +16,9 @@ from stem.control import Controller
 class TorManager:
     """Manages Tor service and provides IP rotation"""
     
-    SOCKS_PORT = 9150
-    CONTROL_PORT = 9152
-    TOR_PASSWORD = "250318Zz@"  # Change this for production
+    SOCKS_PORT = 9050  # Porta SOCKS padrão do Tor
+    CONTROL_PORT = 9051  # Porta de controle padrão (SOCKS + 1)
+    TOR_PASSWORD = os.environ.get("TOR_PASSWORD", "")  # Configured via environment variable
     
     def __init__(self):
         self.tor_process = None
@@ -94,8 +94,25 @@ class TorManager:
             if not os.path.exists("tor_data"):
                 os.makedirs("tor_data")
             
-            # Use absolute path for torrc
-            torrc_path = os.path.abspath("torrc")
+            # Use short path for torrc to avoid encoding issues with special characters (çã)
+            # Tor on Windows often fails with Unicode paths in arguments
+            base_dir = os.getcwd()
+            # If path has special chars, use relative or try to get short path via cmd
+            # Use short path for ALL paths passed to Tor to avoid encoding issues with 'automação'
+            try:
+                # Use latin-1 for decode as it won't fail on ç/ã like utf-8 would
+                raw_short = subprocess.check_output(f'cmd /c "for %I in (\\"{base_dir}\\") do @echo %~sI"', shell=True)
+                short_base = raw_short.decode('latin-1').strip()
+                if short_base:
+                    # [NEW] Mudar para o diretório curto para evitar bugs de encoding em TODA a execução
+                    os.chdir(short_base)
+                    base_dir = short_base
+                    print(f"✓ Changed Working Directory to Short Path: {base_dir}")
+            except Exception as e:
+                print(f"⚠ Could not switch to Short Path: {e}")
+
+            # Use relative path where possible to avoid long absolute paths with special chars
+            torrc_path = os.path.join("config", "torrc")
             print(f"Using torrc config at: {torrc_path}")
 
             # Try to locate geoip files relative to tor.exe
@@ -104,9 +121,7 @@ class TorManager:
             geoip6_path = os.path.join(tor_dir, 'geoip6')
             
             # If standard ones don't exist, check Tor Browser structure
-            # often in Data/Tor/geoip or similar
             if not os.path.exists(geoip_path):
-                 # Try finding them in the tree
                  for root, dirs, files in os.walk(os.path.dirname(tor_dir)):
                      if 'geoip' in files:
                          geoip_path = os.path.join(root, 'geoip')
@@ -116,8 +131,18 @@ class TorManager:
             extra_args = []
             if os.path.exists(geoip_path):
                 print(f"Found geoip at: {geoip_path}")
+                # Try to use short path for geoip too
+                try:
+                    s_geoip = subprocess.check_output(f'cmd /c "for %I in (\\"{geoip_path}\\") do @echo %~sI"', shell=True).decode('latin-1').strip()
+                    if s_geoip: geoip_path = s_geoip
+                except: pass
                 extra_args.extend(['--GeoIPFile', geoip_path])
+                
             if os.path.exists(geoip6_path):
+                 try:
+                    s_geoip6 = subprocess.check_output(f'cmd /c "for %I in (\\"{geoip6_path}\\") do @echo %~sI"', shell=True).decode('latin-1').strip()
+                    if s_geoip6: geoip6_path = s_geoip6
+                 except: pass
                  extra_args.extend(['--GeoIPv6File', geoip6_path])
 
             # Start Tor as a local process
@@ -128,7 +153,7 @@ class TorManager:
                 cmd_args, 
                 stdout=subprocess.PIPE, 
                 stderr=subprocess.PIPE,
-                cwd=os.getcwd()
+                cwd=os.getcwd() # Keep original CWD for process but use paths correctly
             )
             
             # Wait for Tor to be ready
@@ -230,6 +255,56 @@ class TorManager:
         except:
             return False
     
+    def get_active_tor_ports(self):
+        """Detecta todas as portas Tor SOCKS ativas e funcionais (para pool de IPs)"""
+        active_ports = []
+        # Testar portas pares de 9050 a 9088 (20 portas configuradas no torrc)
+        test_ports = list(range(9050, 9089, 2))
+        
+        print(f"🔍 Verificando {len(test_ports)} portas Tor...")
+        for port in test_ports:
+            # Verificação básica: porta aberta?
+            if not self._check_port_open(port):
+                continue
+            
+            # Verificação robusta: porta funciona como SOCKS proxy?
+            if self._verify_socks_port(port):
+                active_ports.append(port)
+                print(f"  ✓ Porta {port} ativa e funcional")
+            else:
+                print(f"  ✗ Porta {port} aberta mas não funcional")
+        
+        print(f"✅ {len(active_ports)} portas Tor prontas para uso")
+        return active_ports
+    
+    def _check_port_open(self, port):
+        """Verifica se uma porta está aberta/acessível"""
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(0.3)
+            result = sock.connect_ex(('127.0.0.1', port))
+            sock.close()
+            return result == 0
+        except:
+            return False
+    
+    def _verify_socks_port(self, port):
+        """Verifica se a porta funciona como proxy SOCKS fazendo requisição teste"""
+        try:
+            proxies = {
+                'http': f'socks5h://127.0.0.1:{port}',
+                'https': f'socks5h://127.0.0.1:{port}'
+            }
+            # Teste rápido (timeout 3s)
+            response = requests.get('https://check.torproject.org/api/ip', 
+                                   proxies=proxies, timeout=3)
+            # Se retornou 200, porta funciona
+            return response.status_code == 200
+        except:
+            return False
+
+
+    
     def get_current_ip(self, use_tor=True):
         """Get current public IP address"""
         try:
@@ -251,23 +326,60 @@ class TorManager:
             return None
     
     def rotate_ip(self):
-        """Request a new Tor circuit (change IP)"""
+        """Request a new Tor circuit (change IP) using manual socket connection to avoid Stem's encoding bugs on Windows"""
         try:
-            with Controller.from_port(port=self.CONTROL_PORT) as controller:
-                controller.authenticate()
-                controller.signal(Signal.NEWNYM)
-                print("✓ Tor IP rotation requested")
-                time.sleep(3)  # Wait for new circuit
-                return True
-                return True
-        except ConnectionRefusedError:
-             print("✗ IP Rotation Failed: Could not connect to Tor Control Port (9152).")
-             print("  -> Is Tor running? Is 'ControlPort 9152' enabled in torrc?")
-             return False
-        except Exception as e:
-            print(f"✗ Failed to rotate IP: {e}")
-            print("Note: IP rotation requires Tor control port configuration")
+            # Usar socket direto para evitar que o stem tente adivinhar caminhos e falhe no encoding (ç)
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(10)
+            s.connect(('127.0.0.1', self.CONTROL_PORT))
+            
+            # Autenticar
+            cookie_path = os.path.join("tor_data", "control_auth_cookie")
+            if os.path.exists(cookie_path):
+                with open(cookie_path, 'rb') as f:
+                    cookie_data = f.read()
+                    import binascii
+                    auth_cmd = f"AUTHENTICATE {binascii.hexlify(cookie_data).decode()}\r\n"
+            else:
+                auth_cmd = f'AUTHENTICATE "{self.TOR_PASSWORD}"\r\n'
+            
+            s.send(auth_cmd.encode())
+            resp = s.recv(1024).decode()
+            
+            if "250" not in resp:
+                s.send(b"AUTHENTICATE\r\n")
+                resp = s.recv(1024).decode()
+            
+            if "250" in resp:
+                s.send(b"SIGNAL NEWNYM\r\n")
+                resp = s.recv(1024).decode()
+                if "250" in resp:
+                    print("✓ Tor IP rotation requested (Manual Socket)")
+                    s.send(b"QUIT\r\n")
+                    s.close()
+                    time.sleep(3)
+                    return True
+                else:
+                    print(f"✗ Tor Signal Failed: {resp}")
+            else:
+                print(f"✗ Tor Auth Failed: {resp}")
+            
+            s.close()
             return False
+            
+        except Exception as e:
+            print(f"⚠ Manual rotation failed ({e}). Trying fallback...")
+            try:
+                from stem.control import Controller
+                with Controller.from_port(port=self.CONTROL_PORT) as controller:
+                    controller.authenticate(password=self.TOR_PASSWORD) 
+                    controller.signal(Signal.NEWNYM)
+                    print("✓ Tor IP rotation requested (Stem Fallback)")
+                    time.sleep(3)
+                    return True
+            except Exception as e2:
+                print(f"✗ IP Rotation Critical Failure: {e2}")
+                return False
     
     def get_proxy_config(self):
         """Get proxy configuration for Playwright"""

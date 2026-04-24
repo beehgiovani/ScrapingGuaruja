@@ -304,7 +304,7 @@ async def run():
 
 
     # Load Lotes
-    input_file = 'entrada_lotes.json'
+    input_file = 'data/entrada_lotes.json'
     try:
         with open(input_file, 'r', encoding='utf-8') as f:
             raw_data = json.load(f)
@@ -367,8 +367,8 @@ async def run():
 
     # Prepare Output Files
     suffix = f"_part{shard_idx}" if total_shards > 1 else ""
-    output_file = f'saida_imoveis{suffix}.json'
-    legacy_file = 'saida_imoveis.json'
+    output_file = f'data/saida_imoveis{suffix}.json'
+    legacy_file = 'data/saida_imoveis.json'
     
     dados_extraidos = []
     lotes_processados_ids = set()
@@ -425,7 +425,9 @@ async def run():
                 legacy_data = json.load(f)
                 skipped_legacy_count = 0
                 for item in legacy_data:
-                     if item.get('inscricao') and item.get('status_processamento') in statuses_to_skip:
+                     status_raw = item.get('status_processamento', '')
+                     status_clean = status_raw.strip() if status_raw else ''
+                     if item.get('inscricao') and status_clean in statuses_to_skip:
                         lotes_processados_ids.add(item['inscricao'])
                         skipped_legacy_count += 1
                 print(f"  -> Carregados {skipped_legacy_count} itens ignorados do arquivo LEGADO ({legacy_file}).")
@@ -439,9 +441,13 @@ async def run():
                 
                 dados_extraidos = []
                 for item in conteudo_existente:
-                    if item.get('inscricao') and item.get('status_processamento') in statuses_to_skip:
+                    status_raw = item.get('status_processamento', '')
+                    status_clean = status_raw.strip() if status_raw else ''
+                    
+                    if item.get('inscricao') and status_clean in statuses_to_skip:
                         lotes_processados_ids.add(item['inscricao'])
                         dados_extraidos.append(item)
+
                         
             print(f"Retomando execução. Carregados {len(dados_extraidos)} lotes VÁLIDOS/PULADOS de {output_file}.")
             
@@ -497,14 +503,14 @@ async def run():
                         launch_options['proxy'] = {
                             'server': 'http://brd.superproxy.io:33335',
                             'username': f'brd-customer-hl_292834f5-zone-proxys-session-{session_id}',
-                            'password': 'qs4mhcgm3rvc'
+                            'password': os.environ.get('PROXY_PASS_BD1', 'YOUR_PROXY_PASSWORD')
                         }
                     elif proxy_type == 'brightdata2':
                         # Bright Data Zone: Residential Proxy 1
                         launch_options['proxy'] = {
                             'server': 'http://brd.superproxy.io:33335',
                             'username': f'brd-customer-hl_292834f5-zone-residential_proxy1-session-{session_id}',
-                            'password': 'jxp0okwy4d0l'
+                            'password': os.environ.get('PROXY_PASS_BD2', 'YOUR_PROXY_PASSWORD')
                         }
                     elif proxy_type == 'file_proxy':
                         # File List Proxy (SOCKS5/HTTP)
@@ -519,8 +525,8 @@ async def run():
                         # Webshare datacenter proxy
                         launch_options['proxy'] = {
                             'server': f'http://{proxy_host_port}',
-                            'username': 'owoqoswg',
-                            'password': 'e6zd34br4bq6'
+                            'username': os.environ.get('PROXY_USER_WS', 'owoqoswg'),
+                            'password': os.environ.get('PROXY_PASS_WS', 'YOUR_PROXY_PASSWORD')
                         }
                 except Exception as e:
                     print(f"Error configuring HTTP proxy: {e}")
@@ -618,7 +624,8 @@ async def run():
                     await geo_page.goto("https://scimpmgsp.geometrus.com.br/mctm_lancamentos/index_certidao_valor_venal", timeout=120000)
                 except Exception as e:
                     # Retry once with full reload
-                    print(f"[{inscricao_target}] Nav Error: {e}. Reloading page...")
+                    # User Request: Suppress loud error logs.
+                    # print(f"[{inscricao_target}] Nav Error: {e}. Reloading page...") if debug
                     await geo_page.reload()
                     await geo_page.goto("https://scimpmgsp.geometrus.com.br/mctm_lancamentos/index_certidao_valor_venal", timeout=120000)
                 
@@ -639,6 +646,7 @@ async def run():
                 
                 # [NEW] Extract Name from Search Page First
                 nome_match_search = re.search(r'Nome\s*\n?\s*(.+?)(?=\n|$)', search_text)
+
                 if nome_match_search:
                     nome_scraped = nome_match_search.group(1).strip()
                     result["nome_proprietario"] = nome_scraped
@@ -876,36 +884,54 @@ async def run():
             max_retries = int(os.getenv("MAX_RETRIES", 20))
             final_result = None
             
-            for attempt in range(max_retries):
-                if attempt > 0:
-                    print(f"⚠️ Retry {attempt+1}/{max_retries} for {inscricao} (Forced Rotation)")
+            # [NEW] 5-Hour Persistence Loop
+            while True:
+                for attempt in range(max_retries):
+                    if attempt > 0:
+                        print(f"⚠️ Retry {attempt+1}/{max_retries} for {inscricao} (Forced Rotation)")
+                        
+                        # Backoff Strategy
+                        wait_time = random.uniform(5, 15) # Default jitter
+                        
+                        # [NEW] Dynamic Progressive Backoff
+                        # Trigger at 50% of attempts remaining (e.g. at 10 if total 20)
+                        trigger_point = int(max_retries / 2)
+                        
+                        if attempt == trigger_point: 
+                            print(f"🛑 CRITICAL: {attempt} Errors (50% mark). Initiating 2-HOUR COOL-DOWN...")
+                            wait_time = 3600 # 2 Hours
+                        elif attempt > trigger_point:
+                            print(f"🛑 PERSISTENT ERROR: Wait extended by 1 HOUR...")
+                            wait_time = 1200 # 1 Hour
+
+                        print(f"  > Waiting {wait_time:.1f}s before rotating...")
+                        await asyncio.sleep(wait_time)
+                        
+                        await rotate_browser_session() # Force rotation on error retry!
                     
-                    # Backoff Strategy
-                    wait_time = random.uniform(5, 15) # Default jitter
+                    res = await process_inscription(inscricao, display_name, page)
                     
-                    # Check if error was proxy refused (passed via result or we might need to check last_exception if we had it, 
-                    # but here we only have the result from previous iteration if it existed, or we are just effectively blindly retrying)
-                    # We don't have the previous 'res' in scope comfortably unless we initialize it, but 'process_inscription' returns a dict.
-                    
-                    # Since we are inside the loop, we can assume we are retrying because of an error.
-                    # Let's add a specific delay if we suspect proxy issues.
-                    print(f"  > Waiting {wait_time:.1f}s before rotating...")
-                    await asyncio.sleep(wait_time)
-                    
-                    await rotate_browser_session() # Force rotation on error retry!
+                    if "erro" in res["status_processamento"].lower():
+                        # If error, try again loop
+                        continue
+                    else:
+                        final_result = res
+                        break
                 
-                res = await process_inscription(inscricao, display_name, page)
-                
-                if "erro" in res["status_processamento"].lower():
-                    # If error, try again loop
-                    continue
-                else:
-                    final_result = res
+                if final_result:
                     break
+                else:
+                    # MAX RETRIES EXHAUSTED
+                    print(f"❌ ALL {max_retries} ATTEMPTS FAILED for {inscricao}.")
+                    print("🛑 FATAL: Entering 5-HOUR RECOVERY SLEEP before restarting this lot...")
+                    print("This mechanism ensures we never skip a lot due to prolonged downtime.")
+                    await asyncio.sleep(7200) # 5 Hours
+                    # Loop restarts -> attempt reset to 0
+                    print("🔄 RESTARTING LOT PROCESSING...")
+                    
             
-            if not final_result:
-                # All failed, save last error
-                final_result = res
+            # if not final_result: # This is unreachable now due to infinite loop above unless break
+            #     final_result = res
             
             dados_extraidos.append(final_result)
             lotes_processados_ids.add(inscricao)
@@ -1008,7 +1034,20 @@ async def run():
                     for sub_attempt in range(max_sub_retries):
                         if sub_attempt > 0:
                             print(f"      ⚠️ Retry {sub_attempt}/{max_sub_retries} for Sub {sub_lote}...")
-                            await asyncio.sleep(random.uniform(2, 5)) 
+                            
+                            # [NEW] Progressive Backoff for Sub-units
+                            wait_time = random.uniform(2, 5)
+                            trigger_point = int(max_sub_retries / 2)
+                            
+                            if sub_attempt == trigger_point: 
+                                print(f"🛑 CRITICAL (Sub): {sub_attempt} Errors. Initiating 2-HOUR COOL-DOWN...")
+                                wait_time = 3600 
+                            elif sub_attempt > trigger_point:
+                                print(f"🛑 PERSISTENT ERROR (Sub): Wait extended by 1 HOUR...")
+                                wait_time = 1800
+                            
+                            print(f"      > Waiting {wait_time:.1f}s...")
+                            await asyncio.sleep(wait_time) 
                         
                         sub_res = await process_inscription(inscricao_sub, f"{display_name} - Sub {sub_lote}", page)
                         
